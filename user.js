@@ -219,7 +219,7 @@ const resetPassword = async (req,res,next) => {
     }
 }
 
-router.put("",resetPassword)
+router.put("/reset",resetPassword)
 
 router.put("", forgetPassword)
 

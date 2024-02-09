@@ -52,7 +52,8 @@ const addWishlist = async (req,res,next) => {
 
         const [results] = await connection.promise().execute(sql,[user_id,product_id])
         res.status(200).send({
-            message : "New wishlists added"
+            message : "New wishlists added",
+            response : results
         })
   
     } catch (error) {
