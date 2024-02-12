@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 const connection = require('./database');
 const otp = require('otp-generator')
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
 
 const registereuser = async (req, res, next) => {
     try {
@@ -40,7 +42,9 @@ const registereuser = async (req, res, next) => {
         }
 
         const sqlstr = `insert into users (name,email, phone_no, password, address) values (?,?,?,?,?)`
-        const [results] = await connection.promise().query(sqlstr, [name, email, phone_no, password, address]);
+
+        const hashPassword = await bcrypt.hash(password, saltRounds)
+        const [results] = await connection.promise().query(sqlstr, [name, email, phone_no, hashPassword, address]);
 
         if (!results.insertId) {
             res.send({
@@ -63,7 +67,7 @@ const registereuser = async (req, res, next) => {
 
 const login = async (req, res, next) => {
     try {
-        const { email, password } = req.query;
+        const { email, password } = req.body;
 
         if (!email) {
             res.send({
@@ -73,30 +77,47 @@ const login = async (req, res, next) => {
 
         if (!password) {
             res.send({
-                message: "passward required"
+                message: "password required"
             })
         }
 
-        const sql = `select * from users where email = ? and password = ?`;
-        const [results] = await connection.promise().execute(sql, [email, password]);
+        const sql = `select email,password from users where email = ? `;
+        const [results] = await connection.promise().execute(sql, [email]);
 
-        if (results.length == 0) {
+        if(results.length == 0){
+            res.send({
+                message : "wrong password"
+            })
+        }
+
+        const hashPassword = results[0].password;
+        const match = await bcrypt.compare(password, hashPassword);
+
+        if (!match) {
             res.send({
                 message: "email or password are incorrect please try again"
             })
         }
 
         res.status(200).send({
+            message : "login succesful"
+        })
+
+        // console.log(results)
+        // // const user = results
+
+
+        res.status(200).send({
             message: "successfully login",
-            response: results
+            response : results
         })
 
     } catch (error) {
-        console.log(error);
-        res.status(500).send({
-            message: "interenal server error"
-        })
-    }
+    console.log(error);
+    res.status(500).send({
+        message: "interenal server error"
+    })
+}
 }
 
 // const user = results[0];
@@ -165,7 +186,7 @@ const forgetPassword = async (req, res, next) => {
         const resultsUpdate = await connection.promise().execute(updatesql, [otp, email]);
 
         res.status(200).send({
-            message : "otp is send"
+            message: "otp is send"
         })
 
     } catch (error) {
@@ -176,54 +197,54 @@ const forgetPassword = async (req, res, next) => {
     }
 }
 
-const resetPassword = async (req,res,next) => {
+const resetPassword = async (req, res, next) => {
     try {
 
-        const {email,otp,newPassword} = req.body;
+        const { email, otp, newPassword } = req.body;
 
-        if(!email){
+        if (!email) {
             res.send({
-                message : "email required"
+                message: "email required"
             })
         }
 
-        if(!otp){
+        if (!otp) {
             res.send({
-                message : "otp required"
+                message: "otp required"
             })
         }
 
         const sql = `update users set password = ? where otp = ? and email = ?`;
-        const [results] = await connection.promise().execute(sql,[newPassword,otp,email])
+        const [results] = await connection.promise().execute(sql, [newPassword, otp, email])
 
-        if(results.affectedRows == 0){
+        if (results.affectedRows == 0) {
             res.send({
-                message : "new password not update"
+                message: "new password not update"
             })
         }
 
         const sqlStr = `update users set otp = null where email = ?`;
-        const [sqlResults] = await connection.promise().execute(sqlStr,[email]);
+        const [sqlResults] = await connection.promise().execute(sqlStr, [email]);
 
         res.send({
-            message : "updated new password",
-            response : sqlResults
+            message: "updated new password",
+            response: sqlResults
         })
 
-        
+
     } catch (error) {
         console.log(error);
         res.status(500).send({
-            message : "Internal Server Error"
+            message: "Internal Server Error"
         })
     }
 }
 
-router.put("/reset",resetPassword)
+router.put("/reset", resetPassword)
 
 router.put("", forgetPassword)
 
-router.get("", login)
+router.post("", login)
 
 router.post("", registereuser);
 
