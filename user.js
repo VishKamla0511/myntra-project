@@ -4,6 +4,7 @@ const connection = require('./database');
 const otp = require('otp-generator')
 const bcrypt = require('bcrypt');
 const saltRounds = 10;
+var jwt = require('jsonwebtoken');
 
 const registereuser = async (req, res, next) => {
     try {
@@ -43,7 +44,7 @@ const registereuser = async (req, res, next) => {
 
         const sqlstr = `insert into users (name,email, phone_no, password, address) values (?,?,?,?,?)`
 
-        const hashPassword = await bcrypt.hash(password, saltRounds)
+        const hashPassword = await bcrypt.hash(password, saltRounds) //encrypt password and store in database
         const [results] = await connection.promise().query(sqlstr, [name, email, phone_no, hashPassword, address]);
 
         if (!results.insertId) {
@@ -81,7 +82,7 @@ const login = async (req, res, next) => {
             })
         }
 
-        const sql = `select email,password from users where email = ? `;
+        const sql = `select user_id,email,password from users where email = ? `;
         const [results] = await connection.promise().execute(sql, [email]);
 
         if(results.length == 0){
@@ -91,7 +92,7 @@ const login = async (req, res, next) => {
         }
 
         const hashPassword = results[0].password;
-        const match = await bcrypt.compare(password, hashPassword);
+        const match = await bcrypt.compare(password, hashPassword); //decrypt password
 
         if (!match) {
             res.send({
@@ -99,8 +100,12 @@ const login = async (req, res, next) => {
             })
         }
 
+        let token = jwt.sign({ user_id : results[0].user_id }, 'server'); //generate token
+        console.log(token);
+
         res.status(200).send({
-            message : "login succesful"
+            message : "login succesful",
+            validToken : token
         })
 
         // console.log(results)
@@ -240,9 +245,30 @@ const resetPassword = async (req, res, next) => {
     }
 }
 
-router.put("/reset", resetPassword)
+const authMiddleware = (req, res, next) => {
+    if (req.headers && req.headers.token) {
+      try {
+        const token = req.headers.token;
+        const decodedToken = jwt.verify(token, 'server')
+        console.log(decodedToken);
+      } catch (err) {
+        console.log({err})
+        res.status(400).send({
+          message: "Invalid Token"
+        })
+      }
+      next()
+      return;
+    }
+  
+    res.status(400).send({
+      message: "Token Required"
+    })
+  }
 
-router.put("", forgetPassword)
+router.put("/reset",authMiddleware, resetPassword)
+
+router.put("",authMiddleware, forgetPassword)
 
 router.post("", login)
 
